@@ -37,6 +37,7 @@ import javax.swing.event.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 
+import org.eclipse.jdt.core.dom.SimpleName;
 import processing.core.PApplet;
 import processing.data.StringList;
 import processing.app.*;
@@ -87,8 +88,9 @@ public class JavaEditor extends Editor {
 
   final private InspectMode inspect;
   final private ShowUsage usage;
-  final private Rename rename;
+  final private processing.mode.java.Searcher searcher;
   final private ErrorChecker errorChecker;
+  final private Rename rename;
 
   private boolean pdexEnabled;
 
@@ -141,6 +143,7 @@ public class JavaEditor extends Editor {
 //    long t5 = System.currentTimeMillis();
 
     usage = new ShowUsage(this, preprocService);
+    searcher = new Searcher(this, preprocService);
     inspect = new InspectMode(this, preprocService, usage);
     rename = new Rename(this, preprocService, usage);
 
@@ -2460,10 +2463,10 @@ public class JavaEditor extends Editor {
     int numOfInts = howManyInts(handles);
     int numOfFloats = howManyFloats(handles);
     if (numOfInts > 0) {
-      header += "int[] tweakmode_int = new int["+numOfInts+"];\n";
+      header += "static int[] tweakmode_int = new int["+numOfInts+"];\n";
     }
     if (numOfFloats > 0) {
-      header += "float[] tweakmode_float = new float["+numOfFloats+"];\n\n";
+      header += "static float[] tweakmode_float = new float["+numOfFloats+"];\n\n";
     }
 
     // add the server code that will receive the value change messages
@@ -2475,7 +2478,8 @@ public class JavaEditor extends Editor {
     for (List<Handle> list : handles) {
       //for (Handle n : handles[i]) {
       for (Handle n : list) {
-        header += "  " + n.name + " = " + n.strValue + ";\n";
+        if (n.type.equals("float")) header += "  " + n.name + " = (float) " + n.strValue + ";\n";
+        else header += "  " + n.name + " = " + n.strValue + ";\n";
       }
     }
     header += "}\n\n";
@@ -2551,5 +2555,14 @@ public class JavaEditor extends Editor {
       }
     }
     return count;
+  }
+
+
+
+  public void extraSearch(Search search) {
+    getSearcher().search(search, search::add);
+  }
+  public Searcher getSearcher() {
+    return searcher;
   }
 }

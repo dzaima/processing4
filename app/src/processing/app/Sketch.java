@@ -39,8 +39,7 @@ import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.*;
@@ -76,7 +75,7 @@ public class Sketch {
   private File codeFolder;
 
   private SketchCode current;
-  private int currentIndex;
+  private int currentTabIndex;
 
   /**
    * Number of sketchCode objects (tabs) in the current sketch. Note that this
@@ -87,6 +86,7 @@ public class Sketch {
    */
   private int codeCount;
   private SketchCode[] code;
+  private List<SketchCode> openTabs;
 
   /** Moved out of Editor and into here for cleaner access. */
   private boolean untitled;
@@ -155,11 +155,16 @@ public class Sketch {
 
     codeCount = filenames.size();
     code = new SketchCode[codeCount];
+    openTabs = new ArrayList<>();
 
     for (int i = 0; i < codeCount; i++) {
       String filename = filenames.get(i);
       String extension = extensions.get(i);
-      code[i] = new SketchCode(new File(folder, filename), extension);
+      SketchCode sketchCode = new SketchCode(new File(folder, filename), extension);
+      code[i] = sketchCode;
+      if (codeCount < 10) { // if there are many tabs, start out with only the main
+        openTabs.add(sketchCode);
+      }
     }
 
     // move the main class to the first tab
@@ -170,6 +175,15 @@ public class Sketch {
         SketchCode temp = code[0];
         code[0] = code[i];
         code[i] = temp;
+        break;
+      }
+    }
+    if (!openTabs.contains(code[0])) openTabs.add(0, code[0]);
+    else for (int i = 1; i < getTabCount(); i++) {
+      if (getTab(i).getFile().equals(primaryFile)) {
+        SketchCode temp = getTab(0);
+        openTabs.set(0, getTab(i));
+        openTabs.set(i, temp);
         break;
       }
     }
@@ -240,7 +254,7 @@ public class Sketch {
     } else {
       replaceCode(new SketchCode(new File(folder, filename), ext));
     }
-    sortCode();
+    // sortCode(); no
   }
 
 
@@ -261,6 +275,7 @@ public class Sketch {
     // add file to the code/codeCount list, resort the list
     //if (codeCount == code.length) {
     code = (SketchCode[]) PApplet.append(code, newCode);
+    openTabs.add(newCode);
     codeCount++;
     //}
     //code[codeCount++] = newCode;
@@ -270,23 +285,24 @@ public class Sketch {
   protected void sortCode() {
     // cheap-ass sort of the rest of the files
     // it's a dumb, slow sort, but there shouldn't be more than ~5 files
-    for (int i = 1; i < codeCount; i++) {
+    int tabCount = getTabCount();
+    for (int i = 1; i < tabCount; i++) {
       int who = i;
-      for (int j = i + 1; j < codeCount; j++) {
-        if (code[j].getFileName().compareTo(code[who].getFileName()) < 0) {
+      for (int j = i + 1; j < tabCount; j++) {
+        if (getTab(j).getFileName().compareTo(getTab(who).getFileName()) < 0) {
           who = j;  // this guy is earlier in the alphabet
         }
       }
       if (who != i) {  // swap with someone if changes made
-        SketchCode temp = code[who];
-        code[who] = code[i];
-        code[i] = temp;
+        SketchCode temp = getTab(who);
+        openTabs.set(who, getTab(i));
+        openTabs.set(i, temp);
 
         // We also need to update the current tab
-        if (currentIndex == i) {
-          currentIndex = who;
-        } else if (currentIndex == who) {
-          currentIndex = i;
+        if (currentTabIndex == i) {
+          currentTabIndex = who;
+        } else if (currentTabIndex == who) {
+          currentTabIndex = i;
         }
       }
     }
@@ -323,7 +339,7 @@ public class Sketch {
     // make sure the user didn't hide the sketch folder
     ensureExistence();
 
-    if (currentIndex == 0 && isUntitled()) {
+    if (currentTabIndex == 0 && isUntitled()) {
       Messages.showMessage(Language.text("rename.messages.is_untitled"),
                            Language.text("rename.messages.is_untitled.description"));
       return;
@@ -346,7 +362,7 @@ public class Sketch {
     // ask for new name of file (internal to window)
     // TODO maybe just popup a text area?
     renamingCode = true;
-    String prompt = (currentIndex == 0) ?
+    String prompt = (currentTabIndex == 0) ?
       Language.text("editor.sketch.rename.description") :
       Language.text("editor.tab.rename.description");
     String oldName = (current.isExtension(mode.getDefaultExtension())) ?
@@ -526,7 +542,7 @@ public class Sketch {
     File newFile = new File(folder, newName);
 
     if (renamingCode) {
-      if (currentIndex == 0) {
+      if (currentTabIndex == 0) {
         // get the new folder name/location
         String folderName = newName.substring(0, newName.indexOf('.'));
         File newFolder = new File(folder.getParentFile(), folderName);
@@ -617,8 +633,8 @@ public class Sketch {
       insertCode(newCode);
     }
 
-    // sort the entries
-    sortCode();
+    // don't sort the entries
+    // sortCode();
 
     // set the new guy as current
     setCurrentCode(newName);
@@ -644,7 +660,7 @@ public class Sketch {
     }
 
     // don't allow if untitled
-    if (currentIndex == 0 && isUntitled()) {
+    if (currentTabIndex == 0 && isUntitled()) {
       Messages.showMessage(Language.text("delete.messages.cannot_delete"),
                            Language.text("delete.messages.cannot_delete.description"));
       return;
@@ -652,7 +668,7 @@ public class Sketch {
 
     // confirm deletion with user, yes/no
     Object[] options = { Language.text("prompt.ok"), Language.text("prompt.cancel") };
-    String prompt = (currentIndex == 0) ?
+    String prompt = (currentTabIndex == 0) ?
       Language.text("warn.delete.sketch") :
       Language.interpolate("warn.delete.file", current.getPrettyName());
     int result = JOptionPane.showOptionDialog(editor,
@@ -664,7 +680,7 @@ public class Sketch {
                                               options,
                                               options[0]);
     if (result == JOptionPane.YES_OPTION) {
-      if (currentIndex == 0) {
+      if (currentTabIndex == 0) {
         // need to unset all the modified flags, otherwise tries
         // to do a save on the handleNew()
 
@@ -704,12 +720,39 @@ public class Sketch {
 
 
   /**
+   * Close a tab of a sketch
+   */
+  public void handleCloseTab() {
+    // don't allow if untitled
+    if (isUntitled()) {
+      Messages.showMessage(Language.text("close.messages.cannot_delete"),
+        Language.text("close.messages.cannot_delete.description"));
+      return;
+    }
+
+    closeTab(current);
+  }
+
+  public void closeTab(SketchCode tab) {
+    int index = currentTabIndex;
+    openTabs.remove(tab);
+
+    // update the tabs
+    editor.rebuildHeader();
+
+    // set to previous tab. index shouldn't be 0 as that'd be closing the main tab
+    setCurrentTab(index-1);
+  }
+
+
+  /**
    * Remove a SketchCode from the list of files without deleting its file.
    * @see #handleDeleteCode()
    */
   public void removeCode(SketchCode which) {
     // remove it from the internal list of files
     // resort internal list of files
+    openTabs.remove(which);
     for (int i = 0; i < codeCount; i++) {
       if (code[i] == which) {
         for (int j = i; j < codeCount-1; j++) {
@@ -728,9 +771,9 @@ public class Sketch {
    * Move to the previous tab.
    */
   public void handlePrevCode() {
-    int prev = currentIndex - 1;
-    if (prev < 0) prev = codeCount-1;
-    setCurrentCode(prev);
+    int prev = currentTabIndex - 1;
+    if (prev < 0) prev = getTabCount()-1;
+    setCurrentTab(prev);
   }
 
 
@@ -738,7 +781,7 @@ public class Sketch {
    * Move to the next tab.
    */
   public void handleNextCode() {
-    setCurrentCode((currentIndex + 1) % codeCount);
+    setCurrentTab((currentTabIndex + 1) % getTabCount());
   }
 
 
@@ -1383,7 +1426,7 @@ public class Sketch {
 
       } else {
         insertCode(newCode);
-        sortCode();
+        // sortCode();
       }
       setCurrentCode(filename);
       editor.repaintHeader();
@@ -1407,19 +1450,34 @@ public class Sketch {
    * Change what file is currently being edited. Changes the current tab index.
    * <OL>
    * <LI> store the String for the text of the current file.
+   * <LI> open the tab if it's not open already.
    * <LI> retrieve the String for the text of the new file.
    * <LI> change the text that's visible in the text area
    * </OL>
    */
   public void setCurrentCode(int which) {
+    if (which < 0 || which >= getCodeCount()) return;
+
+    setCurrentCode(code[which]);
+  }
+  public void setCurrentCode(SketchCode tab) {
+    if (!openTabs.contains(tab)) {
+      openTabs.add(tab);
+
+      editor.rebuildHeader();
+    }
+
+    setCurrentTab(openTabs.indexOf(tab));
+  }
+  public void setCurrentTab(int which) {
 //    // for the tab sizing
 //    if (current != null) {
 //      current.visited = System.currentTimeMillis();
 //      System.out.println(current.visited);
 //    }
     // if current is null, then this is the first setCurrent(0)
-    if (which < 0 || which >= codeCount ||
-        ((currentIndex == which) && (current == code[currentIndex]))) {
+    if (which < 0 || which >= getTabCount() ||
+        ((currentTabIndex == which) && (current == openTabs.get(currentTabIndex)))) {
       return;
     }
 
@@ -1431,8 +1489,8 @@ public class Sketch {
                        editor.getScrollPosition());
     }
 
-    current = code[which];
-    currentIndex = which;
+    current = getTab(which);
+    currentTabIndex = which;
     current.visited = System.currentTimeMillis();
 
     editor.setCode(current);
@@ -1445,9 +1503,9 @@ public class Sketch {
    * @param findName the file name (not pretty name) to be shown
    */
   public void setCurrentCode(String findName) {
-    for (int i = 0; i < codeCount; i++) {
-      if (findName.equals(code[i].getFileName()) ||
-          findName.equals(code[i].getPrettyName())) {
+    for (int i = 0; i < getCodeCount(); i++) {
+      if (findName.equals(getCode(i).getFileName()) ||
+          findName.equals(getCode(i).getPrettyName())) {
         setCurrentCode(i);
         return;
       }
@@ -1678,15 +1736,24 @@ public class Sketch {
   public SketchCode[] getCode() {
     return code;
   }
+  public List<SketchCode> getTabs() {
+    return openTabs;
+  }
 
 
   public int getCodeCount() {
     return codeCount;
   }
+  public int getTabCount() {
+    return openTabs.size();
+  }
 
 
   public SketchCode getCode(int index) {
     return code[index];
+  }
+  public SketchCode getTab(int index) {
+    return openTabs.get(index);
   }
 
 
@@ -1706,7 +1773,7 @@ public class Sketch {
 
 
   public int getCurrentCodeIndex() {
-    return currentIndex;
+    return getCodeIndex(getTab(currentTabIndex));
   }
 
 

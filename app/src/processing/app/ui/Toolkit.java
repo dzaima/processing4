@@ -21,22 +21,7 @@
 
 package processing.app.ui;
 
-import java.awt.BasicStroke;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontFormatException;
-import java.awt.FontMetrics;
-import java.awt.Frame;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.GraphicsConfiguration;
-import java.awt.GraphicsDevice;
-import java.awt.GraphicsEnvironment;
-import java.awt.Image;
-import java.awt.RenderingHints;
-import java.awt.Shape;
-import java.awt.Window;
+import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -69,7 +54,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JRootPane;
 import javax.swing.KeyStroke;
-import javax.swing.border.EmptyBorder;
+import javax.swing.border.*;
 
 import processing.app.Language;
 import processing.app.Messages;
@@ -101,7 +86,7 @@ public class Toolkit {
 
   /** Command-W on Mac OS X, Ctrl-W on Windows and Linux */
   static public final KeyStroke WINDOW_CLOSE_KEYSTROKE =
-    KeyStroke.getKeyStroke('W', SHORTCUT_KEY_MASK);
+    KeyStroke.getKeyStroke('W', SHORTCUT_SHIFT_KEY_MASK);
 
   static final String BAD_KEYSTROKE =
     "'%s' is not understood, please re-read the Java reference for KeyStroke";
@@ -1158,5 +1143,26 @@ public class Toolkit {
     FontRenderContext frc = g2.getFontRenderContext();
     //return new TextLayout("H", font, frc).getBounds().getHeight();
     return new TextLayout("H", g.getFont(), frc).getBounds().getHeight();
+  }
+
+
+  public static void dark(JPopupMenu p) {
+    p.setBorder(new EmptyBorder(5, 0, 5, 0) {
+      @Override public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+        g.setColor(new Color(0x333333));
+        g.fillRect(x, y, width, height);
+      }
+    });
+    for (Component c : p.getComponents()) {
+      if (c instanceof JPopupMenu.Separator) {
+        c.setBackground(new Color(0x2B2B2B));
+        ((JPopupMenu.Separator) c).setOpaque(true);
+      }
+      if (c instanceof JMenuItem) {
+        ((JMenuItem) c).setOpaque(true);
+        c.setBackground(new Color(0x393939));
+        c.setForeground(new Color(0xCCCCCC));
+      }
+    }
   }
 }

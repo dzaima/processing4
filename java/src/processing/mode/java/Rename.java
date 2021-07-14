@@ -6,8 +6,7 @@ import static processing.mode.java.ASTUtils.resolveBinding;
 
 import java.awt.Dimension;
 import java.awt.EventQueue;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.awt.event.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -152,6 +151,12 @@ class Rename {
     }
     window.add(windowBox);
     window.pack();
+    editor.getJavaTextArea().addKeyListener(new KeyAdapter() {
+      @Override
+      public void keyPressed(KeyEvent e) {
+        if (e.isControlDown() && e.isShiftDown() && e.getKeyCode() == 'V') handleRename();
+      }
+    });
     //window.setMinimumSize(window.getSize());
   }
 

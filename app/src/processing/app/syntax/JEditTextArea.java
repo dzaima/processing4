@@ -24,10 +24,12 @@ import javax.swing.event.*;
 import javax.swing.text.*;
 import javax.swing.undo.*;
 import javax.swing.*;
+import javax.swing.plaf.basic.*;
 
 import java.awt.im.InputMethodRequests;
 
 import processing.app.syntax.im.InputMethodSupport;
+import processing.app.ui.DarkScrollBarUI;
 import processing.core.PApplet;
 
 /**
@@ -64,7 +66,7 @@ import processing.core.PApplet;
  *
  * @author Slava Pestov
  */
-public class JEditTextArea extends JComponent
+public class JEditTextArea extends JPanel
 {
   /**
    * Adding components with this name to the text area will place
@@ -123,10 +125,12 @@ public class JEditTextArea extends JComponent
     partialPixelWidth = 0;
 
     // Initialize the GUI
-    setLayout(new ScrollLayout());
+    ScrollLayout sl = new ScrollLayout();
+    setLayout(sl);
     add(CENTER, painter);
-    add(RIGHT, vertical = new JScrollBar(Adjustable.VERTICAL));
-    add(BOTTOM, horizontal = new JScrollBar(Adjustable.HORIZONTAL));
+    add(RIGHT, vertical = new DarkJScrollBar(Adjustable.VERTICAL));
+    add(BOTTOM, horizontal = new DarkJScrollBar(Adjustable.HORIZONTAL));
+    setBackground(new Color(0xff292929));
 
     // Add some event listeners
     vertical.addAdjustmentListener(new AdjustHandler());
@@ -182,6 +186,13 @@ public class JEditTextArea extends JComponent
     });
   }
 
+
+  class DarkJScrollBar extends JScrollBar {
+    DarkJScrollBar(int typeIguess) {
+      super(typeIguess);
+      this.setUI(new DarkScrollBarUI());
+    }
+  }
 
   public void updateTheme() {
     // This default version will update the fonts and not much else.

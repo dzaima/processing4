@@ -39,6 +39,10 @@ import javax.swing.text.*;
 import processing.app.Console;
 import processing.app.Preferences;
 
+import javax.swing.plaf.basic.*;
+import java.awt.*;
+import java.util.concurrent.locks.ReentrantLock;
+
 
 /**
  * Message console that sits below the editing area.
@@ -81,6 +85,11 @@ public class EditorConsole extends JScrollPane {
     sketchErr = new PrintStream(new EditorConsoleStream(true));
 
     startTimer();
+    getVerticalScrollBar().setUI(new DarkScrollBarUI());
+    getHorizontalScrollBar().setUI(new DarkScrollBarUI());
+    JPanel corner = new JPanel();
+    corner.setBackground(new Color(0xff292929));
+    setCorner(JScrollPane.LOWER_RIGHT_CORNER, corner);
   }
 
 
@@ -303,7 +312,8 @@ public class EditorConsole extends JScrollPane {
  */
 class BufferedStyledDocument extends DefaultStyledDocument {
   //List<ElementSpec> elements = new ArrayList<>();
-  LinkedBlockingQueue<ElementSpec> elements;
+  final LinkedBlockingQueue<ElementSpec> elements;
+  final ReentrantLock lock;
 //  AtomicInteger queuedLineCount = new AtomicInteger();
   int maxLineLength, maxLineCount, maxCharCount;
   int currentLineLength = 0;
@@ -317,6 +327,7 @@ class BufferedStyledDocument extends DefaultStyledDocument {
     this.maxLineCount = maxLineCount;
     this.maxCharCount = maxCharCount;
     elements = new LinkedBlockingQueue<>();
+    lock = new ReentrantLock();
   }
 
   // monitor this so that it's only updated when needed (otherwise console
@@ -330,31 +341,45 @@ class BufferedStyledDocument extends DefaultStyledDocument {
 //    hasAppendage = true;
 
     // process each line of the string
-    while (str.length() > 0) {
-      // newlines within an element have (almost) no effect, so we need to
-      // replace them with proper paragraph breaks (start and end tags)
-      if (needLineBreak || currentLineLength > maxLineLength) {
-        elements.add(new ElementSpec(a, ElementSpec.EndTagType));
-        elements.add(new ElementSpec(a, ElementSpec.StartTagType));
-//        queuedLineCount.incrementAndGet();
-        currentLineLength = 0;
-      }
+    try {
+      lock.lock();
+      while (str.length() > 0) {
+        // newlines within an element have (almost) no effect, so we need to
+        // replace them with proper paragraph breaks (start and end tags)
+        if (needLineBreak || currentLineLength > maxLineLength) {
+          elements.add(new ElementSpec(a, ElementSpec.EndTagType));
+          elements.add(new ElementSpec(a, ElementSpec.StartTagType));
+  //        queuedLineCount.incrementAndGet();
+          currentLineLength = 0;
+        }
 
-      if (str.indexOf('\n') == -1) {
-        elements.add(new ElementSpec(a, ElementSpec.ContentType,
-          str.toCharArray(), 0, str.length()));
-        currentLineLength += str.length();
-        needLineBreak = false;
-        str = str.substring(str.length()); // eat the string
-      } else {
-        elements.add(new ElementSpec(a, ElementSpec.ContentType,
-          str.toCharArray(), 0, str.indexOf('\n') + 1));
-        needLineBreak = true;
-        str = str.substring(str.indexOf('\n') + 1); // eat the line
+        if (str.indexOf('\n') == -1) {
+          elements.add(new ElementSpec(a, ElementSpec.ContentType,
+            str.toCharArray(), 0, str.length()));
+          currentLineLength += str.length();
+          needLineBreak = false;
+          str = str.substring(str.length()); // eat the string
+        } else {
+          elements.add(new ElementSpec(a, ElementSpec.ContentType,
+            str.toCharArray(), 0, str.indexOf('\n') + 1));
+          needLineBreak = true;
+          str = str.substring(str.indexOf('\n') + 1); // eat the line
+        }
+        /*
+        while (queuedLineCount.get() > maxLineCount) {
+          Console.systemOut("too many: " + queuedLineCount);
+          ElementSpec elem = elements.remove();
+          if (elem.getType() == ElementSpec.EndTagType) {
+            queuedLineCount.decrementAndGet();
+          }
+        }
+        */
       }
-    }
-    if (elements.size() > 1000) {
-      insertAll();
+      if (elements.size() > 1000) {
+        insertAll();
+      }
+    } finally {
+      lock.unlock();
     }
   }
 

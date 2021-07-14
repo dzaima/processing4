@@ -40,14 +40,7 @@ import processing.app.contrib.ContributionManager;
 import processing.app.syntax.*;
 import processing.core.*;
 
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import java.awt.EventQueue;
-import java.awt.Font;
-import java.awt.Frame;
-import java.awt.Point;
+import java.awt.*;
 import java.awt.datatransfer.*;
 import java.awt.event.*;
 import java.awt.print.*;
@@ -65,6 +58,7 @@ import java.util.TimerTask;
 import java.util.stream.Collectors;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.*;
 import javax.swing.plaf.basic.*;
 import javax.swing.text.*;
@@ -144,6 +138,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
   private boolean isInserting;
 
   private FindReplace find;
+  private Search search;
   JMenu toolsMenu;
   JMenu modePopup;
 
@@ -180,6 +175,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
       public void windowActivated(WindowEvent e) {
         base.handleActivated(Editor.this);
         fileMenu.insert(Recent.getMenu(), 2);
+        Toolkit.dark(fileMenu.getPopupMenu());
         Toolkit.setMenuMnemsInside(fileMenu);
 
         mode.insertImportMenu(sketchMenu);
@@ -191,7 +187,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
         // TODO call handleActivated(null)? or do we run the risk of the
         //      deactivate call for old window being called after the activate?
         fileMenu.remove(Recent.getMenu());
-        mode.removeImportMenu(sketchMenu);
+        Toolkit.dark(fileMenu.getPopupMenu());
         mode.removeToolbarRecentMenu();
       }
     });
@@ -373,6 +369,8 @@ public abstract class Editor extends JFrame implements RunnerListener {
     return state;
   }
 
+  public void extraSearch(Search search) { } // by default don't require anything
+
 
   /**
    * Handles files dragged & dropped from the desktop and into the editor
@@ -491,6 +489,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
       if (mode == m) {
         item.setSelected(true);
       }
+      Toolkit.dark(modePopup.getPopupMenu());
     }
 
     modePopup.addSeparator();
@@ -609,9 +608,31 @@ public abstract class Editor extends JFrame implements RunnerListener {
 
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
+  public class DarkJMenuBar extends JMenuBar {
+
+    @Override
+    protected void paintComponent(Graphics g) {
+      super.paintComponent(g);
+      Graphics2D g2d = (Graphics2D) g;
+      g2d.setColor(new Color(0x3e4040));
+      g2d.fillRect(0, 0, getWidth(), getHeight()+1);
+    }
+
+    @Override public JMenu add(JMenu c) {
+      c.setForeground(new Color(0xbebfbf));
+      Toolkit.dark(c.getPopupMenu());
+      return super.add(c);
+    }
+  }
 
   protected void buildMenuBar() {
-    JMenuBar menubar = new JMenuBar();
+    JMenuBar menubar = new DarkJMenuBar();
+    menubar.setBorder(new EmptyBorder(0, 0, 1, 0) {
+      @Override public void paintBorder(Component c, Graphics g, int x, int y, int width, int height) {
+        g.setColor(new Color(0x555555));
+        g.fillRect(x, height-1, width, 1);
+      }
+    });
     fileMenu = buildFileMenu();
     menubar.add(fileMenu);
     menubar.add(buildEditMenu());
@@ -816,10 +837,21 @@ public abstract class Editor extends JFrame implements RunnerListener {
       // https://github.com/processing/processing/issues/3457
       String selection = getSelectedText();
       if (selection != null && selection.length() != 0 &&
-          !selection.contains("\n")) {
+        !selection.contains("\n")) {
         find.setFindText(selection);
       }
       find.setVisible(true);
+    }
+    );
+    menu.add(item);
+
+
+    item = Toolkit.newJMenuItem(Language.text("menu.edit.search"), 'G');
+    item.addActionListener(e -> {
+      if (search == null) {
+        search = new Search(Editor.this);
+      }
+      search.setVisible(true);
     });
     menu.add(item);
 
@@ -928,6 +960,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
             editor.toFront();
           });
 
+          Toolkit.dark(sketchMenu.getPopupMenu());
           // Disabling for now, might be problematic [fry 200117]
           //Toolkit.setMenuMnemsInside(sketchMenu);
         }
@@ -3067,6 +3100,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
       this.add(referenceItem);
 
       Toolkit.setMenuMnemonics(this);
+      Toolkit.dark(this);
     }
 
     // if no text is selected, disable copy and cut menu items

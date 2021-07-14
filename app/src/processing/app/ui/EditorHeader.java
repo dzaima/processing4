@@ -110,13 +110,12 @@ public class EditorHeader extends JComponent {
           Sketch sketch = editor.getSketch();
           for (Tab tab : tabs) {
             if (tab.contains(x)) {
-              sketch.setCurrentCode(tab.index);
+              sketch.setCurrentTab(tab.index);
               repaint();
             }
           }
         }
       }
-
       public void mouseExited(MouseEvent e) {
         // only clear if it's been set
         if (lastNoticeName != null) {
@@ -128,14 +127,14 @@ public class EditorHeader extends JComponent {
     });
 
     addMouseMotionListener(new MouseMotionAdapter() {
-        public void mouseMoved(MouseEvent e) {
-      int x = e.getX();
-      for (Tab tab : tabs) {
-        if (tab.contains(x) && !tab.textVisible) {
-          lastNoticeName = editor.getSketch().getCode(tab.index).getPrettyName();
-          editor.statusNotice(lastNoticeName);
+      public void mouseMoved(MouseEvent e) {
+        int x = e.getX();
+        for (Tab tab : tabs) {
+          if (tab.contains(x) && !tab.textVisible) {
+            lastNoticeName = editor.getSketch().getTab(tab.index).getPrettyName();
+            editor.statusNotice(lastNoticeName);
+          }
         }
-      }
       }
     });
   }
@@ -196,12 +195,12 @@ public class EditorHeader extends JComponent {
 
     g.drawImage(gradient, 0, 0, imageW, imageH, this);
 
-    if (tabs.length != sketch.getCodeCount()) {
-      tabs = new Tab[sketch.getCodeCount()];
+    if (tabs.length != sketch.getTabCount()) {
+      tabs = new Tab[sketch.getTabCount()];
       for (int i = 0; i < tabs.length; i++) {
         tabs[i] = new Tab(i);
       }
-      visitOrder = new Tab[sketch.getCodeCount() - 1];
+      visitOrder = new Tab[sketch.getTabCount() - 1];
     }
 
     int leftover = TAB_BETWEEN + ARROW_TAB_WIDTH;
@@ -209,7 +208,7 @@ public class EditorHeader extends JComponent {
 
     // reset all tab positions
     for (Tab tab : tabs) {
-      SketchCode code = sketch.getCode(tab.index);
+      SketchCode code = sketch.getTab(tab.index);
       tab.textVisible = true;
       tab.lastVisited = code.lastVisited();
 
@@ -289,8 +288,8 @@ public class EditorHeader extends JComponent {
 //    final int top = bottom - TAB_HEIGHT;
 //    GeneralPath path = null;
 
-    for (int i = 0; i < sketch.getCodeCount(); i++) {
-      SketchCode code = sketch.getCode(i);
+    for (int i = 0; i < sketch.getTabCount(); i++) {
+      SketchCode code = sketch.getTab(i);
       Tab tab = tabs[i];
 
 //      int pieceCount = 2 + (tab.textWidth / PIECE_WIDTH);
@@ -442,6 +441,7 @@ public class EditorHeader extends JComponent {
     String mapKey;
     KeyStroke keyStroke;
 
+    // new tab
     item = Toolkit.newJMenuItemShift(Language.text("editor.header.new_tab"), KeyEvent.VK_N);
     action = new AbstractAction() {
       @Override
@@ -456,6 +456,7 @@ public class EditorHeader extends JComponent {
     item.addActionListener(action);
     menu.add(item);
 
+    //rename
     item = new JMenuItem(Language.text("editor.header.rename"));
     action = new AbstractAction() {
       @Override
@@ -466,6 +467,30 @@ public class EditorHeader extends JComponent {
     item.addActionListener(action);
     menu.add(item);
 
+    // close
+    item = Toolkit.newJMenuItemShift(Language.text("editor.header.close"), KeyEvent.VK_W);
+    action = new AbstractAction() {
+      @Override
+      public void actionPerformed(ActionEvent e) {
+        Sketch sketch = editor.getSketch();
+        if (!Platform.isMacOS() &&  // ok on OS X
+          editor.base.getEditors().size() == 1 &&  // mmm! accessor
+          sketch.getCurrentCodeIndex() == 0) {
+          Messages.showWarning(Language.text("editor.header.close.warning.title"),
+                               Language.text("editor.header.close.warning.text"));
+        } else {
+          editor.getSketch().handleCloseTab();
+        }
+      }
+    };
+    mapKey = "editor.header.close";
+    keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_W, Toolkit.SHORTCUT_KEY_MASK);
+    inputMap.put(keyStroke, mapKey);
+    actionMap.put(mapKey, action);
+    item.addActionListener(action);
+    menu.add(item);
+
+    // delete
     item = Toolkit.newJMenuItemShift(Language.text("editor.header.delete"), KeyEvent.VK_D);
     action = new AbstractAction() {
       @Override
@@ -524,9 +549,15 @@ public class EditorHeader extends JComponent {
     if (sketch != null) {
       menu.addSeparator();
 
-      ActionListener jumpListener =
-        e -> editor.getSketch().setCurrentCode(e.getActionCommand());
-      for (SketchCode code : sketch.getCode()) {
+      ActionListener jumpListener = new ActionListener() {
+        public void actionPerformed(ActionEvent e) {
+          editor.getSketch().setCurrentCode(e.getActionCommand());
+        }
+      };
+      list: for (SketchCode code : sketch.getCode()) {
+        for (SketchCode opened : sketch.getTabs()) {
+          if (code == opened) continue list;
+        }
         item = new JMenuItem(code.getPrettyName());
         item.addActionListener(jumpListener);
         menu.add(item);
@@ -534,6 +565,8 @@ public class EditorHeader extends JComponent {
     }
 
     Toolkit.setMenuMnemonics(menu);
+    Toolkit.dark(menu.getPopupMenu());
+
   }
 
 
