@@ -134,7 +134,7 @@ editor.brackethighlight.color = #006699
   editor.gutter.padding = 3
 
 # squiggly line underneath errors in the editor
-editor.error.underline.color = #f63943
+editor.error.underline.color = #ff6261
 # squiggly line underneath warnings
 editor.warning.underline.color = #fed456
 # lines next to the scrollbar showing where errors are located

@@ -117,6 +117,10 @@ public class DefaultPlatform {
     int fontSize = Preferences.getInteger("ui.font.size");
     if (!"Dialog".equals(fontName) || fontSize != 12) {
       setUIFont(new FontUIResource(fontName, Font.PLAIN, fontSize));
+//      Map<TextAttribute, Object> attributes = new HashMap<>();
+//      attributes.put(TextAttribute.KERNING, TextAttribute.KERNING_ON);
+//      Font font = new Font(fontName, Font.PLAIN, fontSize).deriveFont(attributes);
+//      setUIFont(new FontUIResource(font));
     }
   }
 

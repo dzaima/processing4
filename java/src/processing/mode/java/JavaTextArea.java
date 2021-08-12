@@ -52,8 +52,7 @@ public class JavaTextArea extends PdeTextArea {
   public JavaTextArea(TextAreaDefaults defaults, JavaEditor editor) {
     super(defaults, new JavaInputHandler(editor), editor);
 
-    suggestionGenerator = new CompletionGenerator();
-
+    suggestionGenerator = new CompletionGenerator((JavaMode) editor.getMode());
     tweakMode = false;
   }
 
@@ -141,14 +140,12 @@ public class JavaTextArea extends PdeTextArea {
     super.processKeyEvent(evt);
 
     // code completion disabled if Java tabs present
-    if (!getJavaEditor().hasJavaTabs()) {
-      if (evt.getID() == KeyEvent.KEY_TYPED) {
-        processCompletionKeys(evt);
-      } else if (!Platform.isMacOS() && evt.getID() == KeyEvent.KEY_RELEASED) {
-        processCompletionKeys(evt);
-      } else if (Platform.isMacOS() && evt.getID() == KeyEvent.KEY_RELEASED) {
-        processControlSpace(evt);
-      }
+    if (evt.getID() == KeyEvent.KEY_TYPED) {
+      processCompletionKeys(evt);
+    } else if (!Platform.isMacOS() && evt.getID() == KeyEvent.KEY_RELEASED) {
+      processCompletionKeys(evt);
+    } else if (Platform.isMacOS() && evt.getID() == KeyEvent.KEY_RELEASED) {
+      processControlSpace(evt);
     }
   }
 
@@ -338,7 +335,7 @@ public class JavaTextArea extends PdeTextArea {
           }
         });
       } catch (Exception e) {
-        Messages.loge("error while preparing suggestions", e);
+        Messages.err("error while preparing suggestions", e);
       }
     });
   }

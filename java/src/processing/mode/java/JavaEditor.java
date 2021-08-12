@@ -27,7 +27,6 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -76,11 +75,7 @@ public class JavaEditor extends Editor {
 
   JMenu modeMenu;
 //  protected JMenuItem inspectorItem;
-
 //  static final int ERROR_TAB_INDEX = 0;
-
-  private boolean hasJavaTabs;
-  private boolean javaTabWarned;
 
   protected PreprocService preprocService;
 
@@ -92,11 +87,14 @@ public class JavaEditor extends Editor {
   final private ErrorChecker errorChecker;
   final private Rename rename;
 
-  private boolean pdexEnabled;
-
   // set true to show AST debugging window
   static private final boolean SHOW_AST_VIEWER = false;
   private ASTViewer astViewer;
+
+  /** P5 in decimal; if there are complaints, move to preferences.txt */
+  static final int REFERENCE_PORT = 8053;
+  Boolean useReferenceServer;
+  WebServer referenceServer;
 
 
   protected JavaEditor(Base base, String path, EditorState state,
@@ -118,8 +116,6 @@ public class JavaEditor extends Editor {
     // setting breakpoints will flag sketch as modified, so override this here
     getSketch().setModified(false);
 
-    hasJavaTabs = checkForJavaTabs();
-
     /*
     // hack to add a JPanel to the right-hand side of the text area
     JPanel textAndError = new JPanel();
@@ -137,8 +133,6 @@ public class JavaEditor extends Editor {
     */
 
     preprocService = new PreprocService(this);
-
-    pdexEnabled = !hasJavaTabs();
 
 //    long t5 = System.currentTimeMillis();
 
@@ -204,23 +198,8 @@ public class JavaEditor extends Editor {
         super.rebuild();
 
         // after Rename and New Tab, we may have new .java tabs
-        boolean newHasJavaTabs = checkForJavaTabs();
-        boolean hasJavaTabsChanged = hasJavaTabs != newHasJavaTabs;
-        hasJavaTabs = newHasJavaTabs;
 
         if (preprocService != null) {
-          if (hasJavaTabsChanged) {
-            preprocService.handleHasJavaTabsChange(hasJavaTabs);
-            pdexEnabled = !hasJavaTabs;
-            if (!pdexEnabled) {
-              usage.hide();
-            }
-
-            if (hasJavaTabs) {
-              setProblemList(Collections.emptyList());
-            }
-          }
-
           int currentTabCount = sketch.getCodeCount();
           if (currentTabCount != previousTabCount) {
             previousTabCount = currentTabCount;
@@ -252,7 +231,17 @@ public class JavaEditor extends Editor {
     //String appTitle = JavaToolbar.getTitle(JavaToolbar.EXPORT, false);
     String appTitle = Language.text("menu.file.export_application");
     JMenuItem exportApplication = Toolkit.newJMenuItemShift(appTitle, 'E');
-    exportApplication.addActionListener(e -> handleExportApplication());
+    exportApplication.addActionListener(e -> {
+      if (sketch.isUntitled() || sketch.isReadOnly()) {
+        // Exporting to application will open the sketch folder, which is
+        // weird for untitled sketches (that live in a temp folder) and
+        // read-only sketches (that live in the examples folder).
+        // TODO Better explanation? And some localization too.
+        Messages.showMessage("Save First", "Please first save the sketch.");
+      } else {
+        handleExportApplication();
+      }
+    });
 
     return buildFileMenu(new JMenuItem[] { exportApplication });
   }
@@ -308,7 +297,7 @@ public class JavaEditor extends Editor {
     menu.add(item);
 
     item = new JMenuItem(Language.text("menu.help.environment"));
-    item.addActionListener(e -> showReference("environment" + File.separator + "index.html"));
+    item.addActionListener(e -> showReference("environment/index.html"));
     menu.add(item);
 
     item = new JMenuItem(Language.text("menu.help.reference"));
@@ -1217,6 +1206,34 @@ public class JavaEditor extends Editor {
   }
 
 
+  public void showReference(String filename) {
+    if (useReferenceServer == null) {
+      File referenceZip = new File(mode.getFolder(), "reference.zip");
+      if (referenceZip.exists()) {
+        try {
+          referenceServer = new WebServer(referenceZip, REFERENCE_PORT);
+          useReferenceServer = true;
+
+        } catch (IOException e) {
+          Messages.showWarning("Reference Server Problem", "Error while starting the documentation server.");
+        }
+
+      } else {
+        useReferenceServer = false;
+      }
+    }
+
+    if (useReferenceServer) {
+      String url = referenceServer.getPrefix() + "reference/" + filename;
+      Platform.openURL(url);
+
+    } else {
+      File file = new File(mode.getReferenceFolder(), filename);
+      showReferenceFile(file);
+    }
+  }
+
+
   public void statusError(String what) {
     super.statusError(what);
 //    new Exception("deactivating RUN").printStackTrace();
@@ -1353,7 +1370,7 @@ public class JavaEditor extends Editor {
       // this method gets called twice when saving sketch for the first time
       // once with new name and another with old(causing NPE). Keep an eye out
       // for potential issues. See #2675. TODO:
-      Messages.loge("Illegal tab name to addBreakpointComments() " + tabFilename);
+      Messages.err("Illegal tab name to addBreakpointComments() " + tabFilename);
       return;
     }
     List<LineBreakpoint> bps = debugger.getBreakpoints(tab.getFileName());
@@ -1376,7 +1393,7 @@ public class JavaEditor extends Editor {
       tab.setProgram(code);
       tab.save();
     } catch (IOException ex) {
-      Messages.loge(null, ex);
+      Messages.err(null, ex);
     }
   }
 
@@ -2159,12 +2176,6 @@ public class JavaEditor extends Editor {
     frmImportSuggest.setVisible(true);
   }
 
-
-  public boolean hasJavaTabs() {
-    return hasJavaTabs;
-  }
-
-
   /**
    * Checks if the sketch contains java tabs. If it does, the editor ain't
    * built for it, yet. Also, user should really start looking at a full IDE
@@ -2173,13 +2184,6 @@ public class JavaEditor extends Editor {
   private boolean checkForJavaTabs() {
     for (SketchCode code : getSketch().getCode()) {
       if (code.getExtension().equals("java")) {
-        if (!javaTabWarned) {
-          System.out.println(getSketch().getName() + " contains .java tabs. ");
-          System.out.println("Some editor features (like completion " +
-                             "and error checking) will be disabled.");
-          //Base.showWarning("Cannot debug advanced sketches", msg);
-          javaTabWarned = true;
-        }
         return true;
       }
     }

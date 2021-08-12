@@ -24,10 +24,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -67,15 +64,16 @@ import com.google.classpath.RegExpResourceFilter;
 
 @SuppressWarnings({ "unchecked" })
 public class CompletionGenerator {
+  JavaMode mode;
 
-  public CompletionGenerator() {
+  public CompletionGenerator(JavaMode mode) {
+    this.mode = mode;
     //addCompletionPopupListner();
     //loadJavaDoc();
   }
 
 
-  public static CompletionCandidate[] checkForTypes(ASTNode node) {
-
+  static private CompletionCandidate[] checkForTypes(ASTNode node) {
     List<VariableDeclarationFragment> vdfs = null;
     switch (node.getNodeType()) {
     case ASTNode.TYPE_DECLARATION:
@@ -124,79 +122,82 @@ public class CompletionGenerator {
     return null;
   }
 
-  /**
-   * Find the parent of the expression in a().b, this would give me the return
-   * type of a(), so that we can find all children of a() beginning with b
-   */
-  public static ASTNode resolveExpression(ASTNode nearestNode,
-                                          ASTNode expression, boolean noCompare) {
-    log("Resolving " + getNodeAsString(expression) + " noComp "
-        + noCompare);
-    if (expression instanceof SimpleName) {
-      return findDeclaration2(((SimpleName) expression), nearestNode);
-    } else if (expression instanceof MethodInvocation) {
-      log("3. Method Invo "
-          + ((MethodInvocation) expression).getName());
-      return findDeclaration2(((MethodInvocation) expression).getName(),
-                              nearestNode);
-    } else if (expression instanceof FieldAccess) {
-      log("2. Field access "
-          + getNodeAsString(((FieldAccess) expression).getExpression()) + "|||"
-          + getNodeAsString(((FieldAccess) expression).getName()));
-      if (noCompare) {
-        /*
-         * ASTNode ret = findDeclaration2(((FieldAccess) expression).getName(),
-         * nearestNode); log("Found as ->"+getNodeAsString(ret));
-         * return ret;
-         */
-        return findDeclaration2(((FieldAccess) expression).getName(),
-                                nearestNode);
-      } else {
 
-        /*
-         * Note how for the next recursion, noCompare is reversed. Let's say
-         * I've typed getABC().quark.nin where nin is incomplete(ninja being the
-         * field), when execution first enters here, it calls resolveExpr again
-         * for "getABC().quark" where we know that quark field must be complete,
-         * so we toggle noCompare. And kaboom.
-         */
-        return resolveExpression(nearestNode,
-                                 ((FieldAccess) expression).getExpression(),
-                                 true);
-      }
-      //return findDeclaration2(((FieldAccess) expression).getExpression(), nearestNode);
-    } else if (expression instanceof QualifiedName) {
-      log("1. Resolving "
-          + ((QualifiedName) expression).getQualifier() + " ||| "
-          + ((QualifiedName) expression).getName());
-      if (noCompare) { // no compare, as in "abc.hello." need to resolve hello here
-        return findDeclaration2(((QualifiedName) expression).getName(),
-                                nearestNode);
-      } else {
-        //User typed "abc.hello.by" (bye being complete), so need to resolve "abc.hello." only
-        return findDeclaration2(((QualifiedName) expression).getQualifier(),
-                          nearestNode);
-      }
-    }
+//  /**
+//   * Find the parent of the expression in a().b, this would give me the return
+//   * type of a(), so that we can find all children of a() beginning with b
+//   */
+//  public static ASTNode resolveExpression(ASTNode nearestNode,
+//                                          ASTNode expression, boolean noCompare) {
+//    log("Resolving " + getNodeAsString(expression) + " noComp "
+//        + noCompare);
+//    if (expression instanceof SimpleName) {
+//      return findDeclaration2(((SimpleName) expression), nearestNode);
+//    } else if (expression instanceof MethodInvocation) {
+//      log("3. Method Invo "
+//          + ((MethodInvocation) expression).getName());
+//      return findDeclaration2(((MethodInvocation) expression).getName(),
+//                              nearestNode);
+//    } else if (expression instanceof FieldAccess) {
+//      log("2. Field access "
+//          + getNodeAsString(((FieldAccess) expression).getExpression()) + "|||"
+//          + getNodeAsString(((FieldAccess) expression).getName()));
+//      if (noCompare) {
+//        /*
+//         * ASTNode ret = findDeclaration2(((FieldAccess) expression).getName(),
+//         * nearestNode); log("Found as ->"+getNodeAsString(ret));
+//         * return ret;
+//         */
+//        return findDeclaration2(((FieldAccess) expression).getName(),
+//                                nearestNode);
+//      } else {
+//
+//        /*
+//         * Note how for the next recursion, noCompare is reversed. Let's say
+//         * I've typed getABC().quark.nin where nin is incomplete(ninja being the
+//         * field), when execution first enters here, it calls resolveExpr again
+//         * for "getABC().quark" where we know that quark field must be complete,
+//         * so we toggle noCompare. And kaboom.
+//         */
+//        return resolveExpression(nearestNode,
+//                                 ((FieldAccess) expression).getExpression(),
+//                                 true);
+//      }
+//      //return findDeclaration2(((FieldAccess) expression).getExpression(), nearestNode);
+//    } else if (expression instanceof QualifiedName) {
+//      log("1. Resolving "
+//          + ((QualifiedName) expression).getQualifier() + " ||| "
+//          + ((QualifiedName) expression).getName());
+//      if (noCompare) { // no compare, as in "abc.hello." need to resolve hello here
+//        return findDeclaration2(((QualifiedName) expression).getName(),
+//                                nearestNode);
+//      } else {
+//        //User typed "abc.hello.by" (bye being complete), so need to resolve "abc.hello." only
+//        return findDeclaration2(((QualifiedName) expression).getQualifier(),
+//                          nearestNode);
+//      }
+//    }
+//
+//    return null;
+//  }
 
-    return null;
-  }
 
   /**
    * Finds the type of the expression in foo.bar().a().b, this would give me the
    * type of b if it exists in return type of a(). If noCompare is true,
    * it'll return type of a()
    */
-  public static ClassMember resolveExpression3rdParty(PreprocSketch ps, ASTNode nearestNode,
+  static private ClassMember resolveExpression3rdParty(PreprocSketch ps, ASTNode nearestNode,
                                                       ASTNode astNode, boolean noCompare) {
     log("Resolve 3rdParty expr-- " + getNodeAsString(astNode)
         + " nearest node " + getNodeAsString(nearestNode));
-    if(astNode == null) return null;
+    if (astNode == null) return null;
+
     ClassMember scopeParent;
     SimpleType stp;
-    if(astNode instanceof SimpleName){
+    if (astNode instanceof SimpleName){
       ASTNode decl = findDeclaration2(((SimpleName)astNode),nearestNode);
-      if(decl != null){
+      if (decl != null) {
         // see if locally defined
         log(getNodeAsString(astNode)+" found decl -> " + getNodeAsString(decl));
 
@@ -225,14 +226,12 @@ public class CompletionGenerator {
 
             // Convert element class to array class
             Class<?> arrayClass = getArrayClass(name, ps.classLoader);
-
             return arrayClass == null ? null : new ClassMember(arrayClass);
           }
         }
-
         return new ClassMember(ps, extracTypeInfo(decl));
-      }
-      else {
+
+      } else {
         // or in a predefined class?
         Class<?> tehClass = findClassIfExists(ps, astNode.toString());
         if (tehClass != null) {
@@ -241,14 +240,13 @@ public class CompletionGenerator {
       }
       astNode = astNode.getParent();
     }
+
     switch (astNode.getNodeType()) {
     //TODO: Notice the redundancy in the 3 cases, you can simplify things even more.
     case ASTNode.FIELD_ACCESS:
       FieldAccess fa = (FieldAccess) astNode;
       if (fa.getExpression() == null) {
-
         // TODO: Check for existence of 'new' keyword. Could be a ClassInstanceCreation
-
         // Local code or belongs to super class
         log("FA,Not implemented.");
         return null;
@@ -371,6 +369,7 @@ public class CompletionGenerator {
 
       }
       break;
+
     case ASTNode.QUALIFIED_NAME:
       QualifiedName qn = (QualifiedName) astNode;
       ASTNode temp2 = findDeclaration2(qn.getName(), nearestNode);
@@ -436,7 +435,7 @@ public class CompletionGenerator {
   }
 
 
-  public static Class<?> getArrayClass(String elementClass, ClassLoader classLoader) {
+  static private Class<?> getArrayClass(String elementClass, ClassLoader classLoader) {
     String name;
     if (elementClass.startsWith("[")) {
       // just add a leading "["
@@ -468,7 +467,7 @@ public class CompletionGenerator {
   /**
    * For a().abc.a123 this would return a123
    */
-  static public ASTNode getChildExpression(ASTNode expression) {
+  static private ASTNode getChildExpression(ASTNode expression) {
     if (expression instanceof SimpleName) {
       return expression;
     } else if (expression instanceof FieldAccess) {
@@ -485,7 +484,8 @@ public class CompletionGenerator {
     return null;
   }
 
-  static public ASTNode getParentExpression(ASTNode expression) {
+
+  static private ASTNode getParentExpression(ASTNode expression) {
     if (expression instanceof SimpleName) {
       return expression;
     } else if (expression instanceof FieldAccess) {
@@ -506,7 +506,7 @@ public class CompletionGenerator {
   /**
    * Loads classes from .jar files in sketch classpath
    */
-  public static List<CompletionCandidate> getMembersForType(PreprocSketch ps,
+  static public List<CompletionCandidate> getMembersForType(PreprocSketch ps,
                                                                  String typeName,
                                                                  String child,
                                                                  boolean noCompare,
@@ -516,15 +516,15 @@ public class CompletionGenerator {
         + " in class " + typeName + " noCompare " + noCompare + " staticOnly "
         + staticOnly);
     Class<?> probableClass = findClassIfExists(ps, typeName);
-    if(probableClass == null){
+    if (probableClass == null) {
       log("In GMFT(), class not found.");
       return candidates;
     }
-   return getMembersForType(ps, new ClassMember(probableClass), child, noCompare, staticOnly);
-
+    return getMembersForType(ps, new ClassMember(probableClass), child, noCompare, staticOnly);
   }
 
-  public static ArrayList<CompletionCandidate> getMembersForType(PreprocSketch ps,
+
+  static public ArrayList<CompletionCandidate> getMembersForType(PreprocSketch ps,
                                                                  ClassMember tehClass,
                                                                  String childToLookFor,
                                                                  boolean noCompare,
@@ -570,20 +570,16 @@ public class CompletionGenerator {
       }
 
       ArrayList<CompletionCandidate> superClassCandidates;
-      if(td.getSuperclassType() != null){
+      if (td.getSuperclassType() != null) {
         log(getNodeAsString(td.getSuperclassType()) + " <-Looking into superclass of " + tehClass);
-        superClassCandidates = getMembersForType(ps, new ClassMember(ps, td
-                                                     .getSuperclassType()),
-                                                 childToLookFor, noCompare, staticOnly);
-      }
-      else
-      {
+        ClassMember cm = new ClassMember(ps, td.getSuperclassType());
+        superClassCandidates =
+          getMembersForType(ps, cm, childToLookFor, noCompare, staticOnly);
+      } else {
         superClassCandidates = getMembersForType(ps, new ClassMember(Object.class),
                                                  childToLookFor, noCompare, staticOnly);
       }
-      for (CompletionCandidate cc : superClassCandidates) {
-        candidates.add(cc);
-      }
+      candidates.addAll(superClassCandidates);
       return candidates;
     }
 
@@ -650,7 +646,8 @@ public class CompletionGenerator {
     return candidates;
   }
 
-  private static boolean notStatic(List<org.eclipse.jdt.core.dom.Modifier> modifiers) {
+
+  static private boolean notStatic(List<org.eclipse.jdt.core.dom.Modifier> modifiers) {
     for (org.eclipse.jdt.core.dom.Modifier m : modifiers) {
       if (m.isStatic()) return false;
     }
@@ -662,7 +659,7 @@ public class CompletionGenerator {
    * Searches for the particular class in the default list of imports as well as
    * the Sketch classpath
    */
-  protected static Class<?> findClassIfExists(PreprocSketch ps, String className){
+  static private Class<?> findClassIfExists(PreprocSketch ps, String className){
     if (className == null){
       return null;
     }
@@ -670,16 +667,16 @@ public class CompletionGenerator {
     if (className.indexOf('.') >= 0) {
       // Figure out what is package and what is class
       String[] parts = className.split("\\.");
-      String newClassName = parts[0];
+      StringBuilder newClassName = new StringBuilder(parts[0]);
       int i = 1;
       while (i < parts.length &&
-          ps.classPath.isPackage(newClassName)) {
-        newClassName = newClassName + "/" + parts[i++];
+             ps.classPath.isPackage(newClassName.toString())) {
+        newClassName.append('/').append(parts[i++]);
       }
       while (i < parts.length) {
-        newClassName = newClassName + "$" + parts[i++];
+        newClassName.append('$').append(parts[i++]);
       }
-      className = newClassName.replace('/', '.');
+      className = newClassName.toString().replace('/', '.');
     }
 
     // First, see if the classname is a fully qualified name and loads straightaway
@@ -724,9 +721,9 @@ public class CompletionGenerator {
               }
               return null;
             })
-            .filter(name -> name != null)
+            .filter(Objects::nonNull)
             .map(name -> loadClass(name, ps.classLoader))
-            .filter(cls -> cls != null)
+            .filter(Objects::nonNull)
             .findAny())
         .filter(Optional::isPresent)
         .map(Optional::get)
@@ -734,7 +731,7 @@ public class CompletionGenerator {
         .orElse(null);
   }
 
-  protected static Class<?> loadClass(String className, ClassLoader classLoader){
+  static private Class<?> loadClass(String className, ClassLoader classLoader){
     Class<?> tehClass = null;
     if (className != null) {
       try {
@@ -746,7 +743,7 @@ public class CompletionGenerator {
     return tehClass;
   }
 
-  public static ClassMember definedIn3rdPartyClass(PreprocSketch ps, String className,String memberName){
+  static ClassMember definedIn3rdPartyClass(PreprocSketch ps, String className, String memberName){
     Class<?> probableClass = findClassIfExists(ps, className);
     if (probableClass == null) {
       log("Couldn't load " + className);
@@ -759,7 +756,8 @@ public class CompletionGenerator {
     }
   }
 
-  public static ClassMember definedIn3rdPartyClass(PreprocSketch ps, ClassMember tehClass,String memberName){
+
+  static ClassMember definedIn3rdPartyClass(PreprocSketch ps, ClassMember tehClass,String memberName){
     if(tehClass == null)
       return null;
     log("definedIn3rdPartyClass-> Looking for " + memberName
@@ -813,7 +811,7 @@ public class CompletionGenerator {
   }
 
 
-  protected static ASTNode findClosestParentNode(int lineNumber, ASTNode node) {
+  static private ASTNode findClosestParentNode(int lineNumber, ASTNode node) {
     // Base.loge("Props of " + node.getClass().getName());
     for (StructuralPropertyDescriptor prop : (Iterable<StructuralPropertyDescriptor>) node
         .structuralPropertiesForType()) {
@@ -847,7 +845,8 @@ public class CompletionGenerator {
     return node;
   }
 
-  protected static ASTNode findClosestNode(int lineNumber, ASTNode node) {
+
+  static private ASTNode findClosestNode(int lineNumber, ASTNode node) {
     log("findClosestNode to line " + lineNumber);
     ASTNode parent = findClosestParentNode(lineNumber, node);
     log("findClosestParentNode returned " + getNodeAsString(parent));
@@ -884,9 +883,9 @@ public class CompletionGenerator {
   /**
    * Fetches line number of the node in its CompilationUnit.
    */
-  public static int getLineNumber(ASTNode node) {
-    return ((CompilationUnit) node.getRoot()).getLineNumber(node
-        .getStartPosition());
+  static public int getLineNumber(ASTNode node) {
+    CompilationUnit cu = (CompilationUnit) node.getRoot();
+    return cu.getLineNumber(node.getStartPosition());
   }
 
 
@@ -912,8 +911,7 @@ public class CompletionGenerator {
    * ASTNode for ex, and it tries its level best to locate its declaration in
    * the AST. It really does.
    */
-  protected static ASTNode findDeclaration(Name findMe) {
-
+  static private ASTNode findDeclaration(Name findMe) {
     // WARNING: You're entering the Rube Goldberg territory of Experimental Mode.
     // To debug this code, thou must take the Recursive Leap of Faith.
 
@@ -961,7 +959,6 @@ public class CompletionGenerator {
             return definedIn(declaringClass, ((MethodInvocation) parent)
                 .getName().toString(), constrains);
           }
-
         }
       } else {
         parent = parent.getParent(); // Move one up the ast. V V IMP!!
@@ -1104,7 +1101,7 @@ public class CompletionGenerator {
   /**
    * A variation of findDeclaration() but accepts an alternate parent ASTNode
    */
-  protected static ASTNode findDeclaration2(Name findMe, ASTNode alternateParent) {
+  static private ASTNode findDeclaration2(Name findMe, ASTNode alternateParent) {
     ASTNode declaringClass;
     ASTNode parent = findMe.getParent();
     ASTNode ret;
@@ -1289,8 +1286,7 @@ public class CompletionGenerator {
   }
 
 
-  protected static boolean ignorableSuggestionImport(PreprocSketch ps, String impName) {
-
+  private boolean ignorableSuggestionImport(PreprocSketch ps, String impName) {
     String impNameLc = impName.toLowerCase();
 
     List<ImportStatement> programImports = ps.programImports;
@@ -1305,17 +1301,14 @@ public class CompletionGenerator {
 
     if (isImported) return false;
 
-    final String include = "include";
-    final String exclude = "exclude";
-
     if (impName.startsWith("processing")) {
-      if (JavaMode.suggestionsMap.containsKey(include) && JavaMode.suggestionsMap.get(include).contains(impName)) {
+      if (mode.includeSuggestion(impName)) {
         return false;
-      } else if (JavaMode.suggestionsMap.containsKey(exclude) && JavaMode.suggestionsMap.get(exclude).contains(impName)) {
+      } else if (mode.excludeSuggestion(impName)) {
         return true;
       }
     } else if (impName.startsWith("java")) {
-      if (JavaMode.suggestionsMap.containsKey(include) && JavaMode.suggestionsMap.get(include).contains(impName)) {
+      if (mode.includeSuggestion(impName)) {
         return false;
       }
     }
@@ -1331,18 +1324,18 @@ public class CompletionGenerator {
    * @author quarkninja
    *
    */
-  public static class ClassMember {
+  static class ClassMember {
     private Field field;
     private Method method;
     private Constructor<?> cons;
-    private Class<?> thisclass;
-    private String stringVal;
+    private Class<?> thisClass;
+    private final String stringVal;
     private String classType;
     private ASTNode astNode;
     private ASTNode declaringNode;
 
     public ClassMember(Class<?> m) {
-      thisclass = m;
+      thisClass = m;
       stringVal = "Predefined Class " + m.getName();
       classType = m.getName();
     }
@@ -1361,11 +1354,11 @@ public class CompletionGenerator {
       classType = m.getType().getName();
     }
 
-    public ClassMember(Constructor<?> m) {
-      cons = m;
-      stringVal = "Cons " + " " + m.getName() + " defined in "
-          + m.getDeclaringClass().getName();
-    }
+//    public ClassMember(Constructor<?> m) {
+//      cons = m;
+//      stringVal = "Cons " + " " + m.getName() + " defined in "
+//          + m.getDeclaringClass().getName();
+//    }
 
     public ClassMember(PreprocSketch ps, ASTNode node){
       astNode = node;
@@ -1384,7 +1377,7 @@ public class CompletionGenerator {
         if(decl == null){
           // a predefined type
           classType = stp.getName().toString();
-          thisclass = findClassIfExists(ps, classType);
+          thisClass = findClassIfExists(ps, classType);
         }
         else{
           // a local type
@@ -1394,7 +1387,7 @@ public class CompletionGenerator {
     }
 
     public Class<?> getClass_() {
-      return thisclass;
+      return thisClass;
     }
 
     public ASTNode getDeclaringNode(){
@@ -1409,13 +1402,13 @@ public class CompletionGenerator {
       return method;
     }
 
-    public Constructor<?> getCons() {
-      return cons;
-    }
+//    public Constructor<?> getCons() {
+//      return cons;
+//    }
 
-    public ASTNode getASTNode(){
-      return astNode;
-    }
+//    public ASTNode getASTNode(){
+//      return astNode;
+//    }
 
     public String toString() {
       return stringVal;
@@ -1430,7 +1423,7 @@ public class CompletionGenerator {
   /**
    * Find the SimpleType from FD, SVD, VDS, etc
    */
-  public static SimpleType extracTypeInfo(ASTNode node) {
+  static private SimpleType extracTypeInfo(ASTNode node) {
     if (node == null) {
       return null;
     }
@@ -1460,7 +1453,7 @@ public class CompletionGenerator {
   }
 
 
-  static public Type extracTypeInfo2(ASTNode node) {
+  static Type extracTypeInfo2(ASTNode node) {
     Messages.log("* extracTypeInfo2");
     if (node == null)
       return null;
@@ -1483,7 +1476,7 @@ public class CompletionGenerator {
   }
 
 
-  static protected ASTNode definedIn(ASTNode node, String name,
+  static private ASTNode definedIn(ASTNode node, String name,
                                    ArrayList<Integer> constrains) {
     if (node == null)
       return null;
@@ -1670,7 +1663,7 @@ public class CompletionGenerator {
   /// Predictions --------------------------------------------------------------
 
 
-  protected static List<CompletionCandidate> trimCandidates(String newWord, List<CompletionCandidate> candidates) {
+  static private List<CompletionCandidate> trimCandidates(String newWord, List<CompletionCandidate> candidates) {
     ArrayList<CompletionCandidate> newCandidate = new ArrayList<>();
     newWord = newWord.toLowerCase();
     for (CompletionCandidate comp : candidates) {
@@ -1682,8 +1675,8 @@ public class CompletionGenerator {
     return newCandidate;
   }
 
-  protected List<CompletionCandidate> candidates;
-  protected String lastPredictedPhrase = " ";
+  private List<CompletionCandidate> candidates;
+  private String lastPredictedPhrase = " ";
 
   /**
    * The main function that calculates possible code completion candidates
@@ -1757,7 +1750,7 @@ public class CompletionGenerator {
     ASTNode testnode = parser.createAST(null);
     //Base.loge("PREDICTION PARSER PROBLEMS: " + parser);
     // Find closest ASTNode of the document to this word
-    Messages.loge("Typed: " + phrase + "|" + " temp Node type: " + testnode.getClass().getSimpleName());
+    Messages.err("Typed: " + phrase + "|" + " temp Node type: " + testnode.getClass().getSimpleName());
     if(testnode instanceof MethodInvocation){
       MethodInvocation mi = (MethodInvocation)testnode;
       log(mi.getName() + "," + mi.getExpression() + "," + mi.typeArguments().size());
@@ -1769,7 +1762,7 @@ public class CompletionGenerator {
       // Make sure nearestNode is not NULL if couldn't find a closest node
       nearestNode = astRootNode;
     }
-    Messages.loge(lineNumber + " Nearest ASTNode to PRED "
+    Messages.err(lineNumber + " Nearest ASTNode to PRED "
                       + getNodeAsString(nearestNode));
 
     candidates = new ArrayList<>();
@@ -1777,7 +1770,7 @@ public class CompletionGenerator {
     // Determine the expression typed
 
     if (testnode instanceof SimpleName && !noCompare) {
-      Messages.loge("One word expression " + getNodeAsString(testnode));
+      Messages.err("One word expression " + getNodeAsString(testnode));
       //==> Simple one word exprssion - so is just an identifier
 
       // Bottom up traversal of the AST to look for possible definitions at
@@ -1857,7 +1850,7 @@ public class CompletionGenerator {
     } else {
       // ==> Complex expression of type blah.blah2().doIt,etc
       // Have to resolve it by carefully traversing AST of testNode
-      Messages.loge("Complex expression " + getNodeAsString(testnode));
+      Messages.err("Complex expression " + getNodeAsString(testnode));
       log("candidates empty");
       ASTNode childExpr = getChildExpression(testnode);
       log("Parent expression : " + getParentExpression(testnode));
@@ -1872,7 +1865,7 @@ public class CompletionGenerator {
       if (expr == null) {
         log("Expr is null");
       } else {
-        boolean isArray = expr.thisclass != null && expr.thisclass.isArray();
+        boolean isArray = expr.thisClass != null && expr.thisClass.isArray();
         boolean isSimpleType = (expr.astNode != null) &&
             expr.astNode.getNodeType() == ASTNode.SIMPLE_TYPE;
         boolean isMethod = expr.method != null;

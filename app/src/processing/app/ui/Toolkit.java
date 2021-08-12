@@ -303,7 +303,7 @@ public class Toolkit {
     final FontMetrics fm = fmTmp; // Hack for accessing variable in comparator.
 
     final Comparator<Character> charComparator = new Comparator<>() {
-      char[] baddies = "qypgjaeiouQAEIOU".toCharArray();
+      final char[] baddies = "qypgjaeiouQAEIOU".toCharArray();
       public int compare(Character ch1, Character ch2) {
         // Discriminates against descenders for readability, per MS
         // Human Interface Guide, and vowels per MS and Gnome.
@@ -468,7 +468,7 @@ public class Toolkit {
     for (Component c : menu.getComponents()) {
       if (c instanceof JMenuItem) items.add((JMenuItem)c);
     }
-    setMenuMnemonics(items.toArray(new JMenuItem[items.size()]));
+    setMenuMnemonics(items.toArray(new JMenuItem[0]));
   }
 
 
@@ -520,8 +520,8 @@ public class Toolkit {
    */
   static public ImageIcon getLibIcon(String filename) {
     File file = Platform.getContentFile("lib/" + filename);
-    if (!file.exists()) {
-//      System.err.println("does not exist: " + file);
+    if (file == null || !file.exists()) {
+      Messages.err("does not exist: " + file);
       return null;
     }
     return new ImageIcon(file.getAbsolutePath());
@@ -547,8 +547,7 @@ public class Toolkit {
       return null;
     }
 
-    ImageIcon outgoing = new ImageIcon(file.getAbsolutePath()) {
-
+    return new ImageIcon(file.getAbsolutePath()) {
       @Override
       public int getIconWidth() {
         return Toolkit.zoom(super.getIconWidth()) / scale;
@@ -568,7 +567,6 @@ public class Toolkit {
         g.drawImage(getImage(), x, y, getIconWidth(), getIconHeight(), imageObserver);
       }
     };
-    return outgoing;
   }
 
 
@@ -1019,7 +1017,7 @@ public class Toolkit {
           sansBoldFont = new Font("Monospaced", Font.BOLD, size);
         }
       } catch (Exception e) {
-        Messages.loge("Could not load mono font", e);
+        Messages.err("Could not load mono font", e);
         monoFont = new Font("Monospaced", Font.PLAIN, size);
         monoBoldFont = new Font("Monospaced", Font.BOLD, size);
       }
@@ -1067,7 +1065,7 @@ public class Toolkit {
           sansBoldFont = new Font("SansSerif", Font.BOLD, size);
         }
       } catch (Exception e) {
-        Messages.loge("Could not load sans font", e);
+        Messages.err("Could not load sans font", e);
         sansFont = new Font("SansSerif", Font.PLAIN, size);
         sansBoldFont = new Font("SansSerif", Font.BOLD, size);
       }
@@ -1095,18 +1093,9 @@ public class Toolkit {
    * the Preferences window, and can be used by HTMLEditorKit for WebFrame).
    */
   static private Font createFont(String filename, int size) throws IOException, FontFormatException {
-    boolean registerFont = false;
+    File fontFile = Platform.getContentFile("lib/fonts/" + filename);
 
-    // try the JRE font directory first
-    File fontFile = new File(System.getProperty("java.home"), "lib/fonts/" + filename);
-
-    // else fall back to our own content dir
-    if (!fontFile.exists()) {
-      fontFile = Platform.getContentFile("lib/fonts/" + filename);
-      registerFont = true;
-    }
-
-    if (!fontFile.exists()) {
+    if (fontFile == null || !fontFile.exists()) {
       String msg = "Could not find required fonts. ";
       // This gets the JAVA_HOME for the *local* copy of the JRE installed with
       // Processing. If it's not using the local JRE, it may be because of this
@@ -1120,15 +1109,12 @@ public class Toolkit {
       Messages.showError("Font Sadness", msg, null);
     }
 
-
     BufferedInputStream input = new BufferedInputStream(new FileInputStream(fontFile));
     Font font = Font.createFont(Font.TRUETYPE_FONT, input);
     input.close();
 
-    if (registerFont) {
-      GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-      ge.registerFont(font);
-    }
+    GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+    ge.registerFont(font);
 
     return font.deriveFont((float) size);
   }

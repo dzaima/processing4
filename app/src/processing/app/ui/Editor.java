@@ -597,7 +597,14 @@ public abstract class Editor extends JFrame implements RunnerListener {
     errorColumn.updateTheme();
     status.updateTheme();
     console.updateTheme();
-    errorTable.updateTheme();
+    footer.updateTheme();
+
+    // Not all Modes will have an error table (that's why it's addErrorTable()
+    // and not createErrorTable() and called by default).
+    // https://github.com/jdf/processing.py/issues/382#issuecomment-892269678
+    if (errorTable != null) {
+      errorTable.updateTheme();
+    }
 
     toolTipFont = Toolkit.getSansFont(Toolkit.zoom(9), Font.PLAIN);
     toolTipTextColor = Theme.getColor("errors.selection.fgcolor");
@@ -912,12 +919,31 @@ public abstract class Editor extends JFrame implements RunnerListener {
     sketchMenu.add(mode.getImportMenu());
 
     item = Toolkit.newJMenuItem(Language.text("menu.sketch.show_sketch_folder"), 'K');
-    item.addActionListener(e -> Platform.openFolder(sketch.getFolder()));
+    item.addActionListener(e -> {
+      if (sketch.isUntitled() || sketch.isReadOnly()) {
+        // Too weird to show the sketch folder when it's buried somewhere in an
+        // OS-specific temp directory. TODO a better, and localized, message.
+        Messages.showMessage("Save First", "Please first save the sketch.");
+
+      } else {
+        Platform.openFolder(sketch.getFolder());
+      }
+    });
     sketchMenu.add(item);
     item.setEnabled(Platform.openFolderAvailable());
 
     item = new JMenuItem(Language.text("menu.sketch.add_file"));
-    item.addActionListener(e -> sketch.handleAddFile());
+    item.addActionListener(e -> {
+      if (sketch.isUntitled() || sketch.isReadOnly()) {
+        // Technically, this sketch either doesn't exist (it's untitled and
+        // lives in a temp folder) or it shouldn't be overwritten/modified
+        // (it's an example). Just ask the user to save. TODO same as above.
+        Messages.showMessage("Save First", "Please first save the sketch.");
+
+      } else {
+        sketch.handleAddFile();
+      }
+    });
     sketchMenu.add(item);
 
     if (runItems != null && runItems.length != 0) {
@@ -1054,80 +1080,6 @@ public abstract class Editor extends JFrame implements RunnerListener {
   public JMenu buildModeMenu() {
     return null;
   }
-
-
-  /*
-  protected void addToolMenuItem(JMenu menu, String className) {
-    try {
-      Class<?> toolClass = Class.forName(className);
-      final Tool tool = (Tool) toolClass.newInstance();
-
-      JMenuItem item = new JMenuItem(tool.getMenuTitle());
-
-      tool.init(Editor.this);
-
-      item.addActionListener(new ActionListener() {
-        public void actionPerformed(ActionEvent e) {
-          EventQueue.invokeLater(tool);
-        }
-      });
-      menu.add(item);
-
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
-  }
-
-
-  protected JMenu addInternalTools(JMenu menu) {
-    addToolMenuItem(menu, "processing.app.tools.CreateFont");
-    addToolMenuItem(menu, "processing.app.tools.ColorSelector");
-    addToolMenuItem(menu, "processing.app.tools.Archiver");
-
-    if (Platform.isMacOS()) {
-      addToolMenuItem(menu, "processing.app.tools.InstallCommander");
-    }
-
-    return menu;
-  }
-  */
-
-
-  /*
-  // testing internal web server to serve up docs from a zip file
-  item = new JMenuItem("Web Server Test");
-  item.addActionListener(new ActionListener() {
-      public void actionPerformed(ActionEvent e) {
-        //WebServer ws = new WebServer();
-        SwingUtilities.invokeLater(new Runnable() {
-          public void run() {
-            try {
-              int port = WebServer.launch("/Users/fry/coconut/processing/build/shared/reference.zip");
-              Base.openURL("http://127.0.0.1:" + port + "/reference/setup_.html");
-
-            } catch (IOException e1) {
-              e1.printStackTrace();
-            }
-          }
-        });
-      }
-    });
-  menu.add(item);
-  */
-
-  /*
-  item = new JMenuItem("Browser Test");
-  item.addActionListener(new ActionListener() {
-      public void actionPerformed(ActionEvent e) {
-        //Base.openURL("http://processing.org/learning/gettingstarted/");
-        //JFrame browserFrame = new JFrame("Browser");
-        BrowserStartup bs = new BrowserStartup("jar:file:/Users/fry/coconut/processing/build/shared/reference.zip!/reference/setup_.html");
-        bs.initUI();
-        bs.launch();
-      }
-    });
-  menu.add(item);
-  */
 
 
   abstract public JMenu buildHelpMenu();
@@ -2209,50 +2161,6 @@ public abstract class Editor extends JFrame implements RunnerListener {
   }
 
 
-  /*
-  protected void handleFindReference() {
-    String text = textarea.getSelectedText().trim();
-
-    if (text.length() == 0) {
-      statusNotice("First select a word to find in the reference.");
-
-    } else {
-      char[] c = textarea.getText().toCharArray();
-      int after = Math.max(textarea.getSelectionStart(), textarea.getSelectionStop());
-      if (checkParen(c, after, c.length)) {
-        text += "_";
-        System.out.println("looking up ref for " + text);
-      }
-      String referenceFile = mode.lookupReference(text);
-      System.out.println("reference file is " + referenceFile);
-      if (referenceFile == null) {
-        statusNotice("No reference available for \"" + text + "\"");
-      } else {
-        showReference(referenceFile + ".html");
-      }
-    }
-  }
-
-
-  protected void handleFindReference() {
-    String text = textarea.getSelectedText().trim();
-
-    if (text.length() == 0) {
-      statusNotice("First select a word to find in the reference.");
-
-    } else {
-      String referenceFile = mode.lookupReference(text);
-      //System.out.println("reference file is " + referenceFile);
-      if (referenceFile == null) {
-        statusNotice("No reference available for \"" + text + "\"");
-      } else {
-        showReference(referenceFile + ".html");
-      }
-    }
-  }
-  */
-
-
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
 
 
@@ -2443,7 +2351,7 @@ public abstract class Editor extends JFrame implements RunnerListener {
 
         // remove the original file, so user doesn't get confused
         if (!origPdeFile.delete()) {
-          Messages.loge("Could not delete " + origPdeFile);
+          Messages.err("Could not delete " + origPdeFile);
         }
 
         // update with the new path

@@ -23,13 +23,13 @@
 
 package processing.app;
 
-import java.awt.EventQueue;
-import java.awt.FileDialog;
+import java.awt.*;
 import java.awt.event.ActionListener;
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.List;
 import java.util.Map.Entry;
 
 import javax.swing.*;
@@ -38,6 +38,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import processing.app.contrib.*;
 import processing.app.tools.Tool;
 import processing.app.ui.*;
+import processing.app.ui.Toolkit;
 import processing.core.*;
 import processing.data.StringList;
 
@@ -46,7 +47,7 @@ import processing.data.StringList;
  * The base class for the main processing application.
  * Primary role of this class is for platform identification and
  * general interaction with the system (launching URLs, loading
- * files and images, etc) that comes from that.
+ * files and images, etc.) that comes from that.
  */
 public class Base {
   // Added accessors for 0218 because the UpdateCheck class was not properly
@@ -54,6 +55,9 @@ public class Base {
   static private final int REVISION = 1276;
   /** This might be replaced by main() if there's a lib/version.txt file. */
   static private String VERSION_NAME = "1276"; //$NON-NLS-1$
+
+  static final public String SKETCH_BUNDLE_EXT = ".pdez";
+  static final public String CONTRIB_BUNDLE_EXT = ".pdex";
 
   /**
    * True if heavy debugging error/log messages are enabled. Set to true
@@ -159,16 +163,16 @@ public class Base {
 
     // Set the debug flag based on a file being present in the settings folder
     File debugFile = getSettingsFile("debug");
-    /*
-    if (debugFile.isDirectory()) {
-      // if it's a directory, it's a leftover from older releases, clear it
-      Util.removeDir(debugFile);
-    } else*/
-    if (debugFile.exists()) {
+
+    // If it's a directory, it's a leftover from much older releases
+    // (2.x? 3.x?) that wrote DebugMode.log files into this directory.
+    // Could remove the directory, but it's harmless enough that it's
+    // not worth deleting files in case something could go wrong.
+    if (debugFile.exists() && debugFile.isFile()) {
       DEBUG = true;
     }
 
-    // Use native popups so they don't look so crappy on OS X
+    // Use native popups so they don't look crappy on macOS
     JPopupMenu.setDefaultLightWeightPopupEnabled(false);
 
     // Don't put anything above this line that might make GUI,
@@ -191,7 +195,7 @@ public class Base {
         Platform.setLookAndFeel();
         Platform.setInterfaceZoom();
       } catch (Exception e) {
-        Messages.loge("Error while setting up the interface", e); //$NON-NLS-1$
+        Messages.err("Error while setting up the interface", e); //$NON-NLS-1$
       }
 
 //      long t3 = System.currentTimeMillis();
@@ -228,7 +232,7 @@ public class Base {
         SingleInstance.startServer(base);
 
         handleWelcomeScreen(base);
-        checkDriverBug();
+        //checkDriverBug();  // that was 2017, right?
 
       } catch (Throwable t) {
         // Catch-all to pick up badness during startup.
@@ -250,9 +254,9 @@ public class Base {
 
   static private void handleWelcomeScreen(Base base) {
     boolean sketchbookPrompt = false;
-    if (Preferences.getBoolean("welcome.show")) {
+    if (Preferences.getBoolean("welcome.four.beta.show")) {
       // only ask once about split sketchbooks
-      if (!Preferences.getBoolean("welcome.seen")) {
+      if (!Preferences.getBoolean("welcome.four.beta.seen")) {
         // Check if there's a 2.0 sketchbook present
         String oldPath = Preferences.getOldSketchbookPath();
         if (oldPath != null) {
@@ -273,7 +277,7 @@ public class Base {
 
     // Needs to be shown after the first editor window opens, so that it
     // shows up on top, and doesn't prevent an editor window from opening.
-    if (Preferences.getBoolean("welcome.show")) {
+    if (Preferences.getBoolean("welcome.four.beta.show")) {
       try {
         new Welcome(base, sketchbookPrompt);
       } catch (IOException e) {
@@ -285,7 +289,8 @@ public class Base {
   }
 
 
-  // Remove this code in a couple months [fry 170211]
+  /*
+  // Remove this code in a couple of months [fry 170211]
   // https://github.com/processing/processing/issues/4853
   // Or maybe not, if NVIDIA keeps doing this [fry 170423]
   // https://github.com/processing/processing/issues/4997
@@ -315,11 +320,12 @@ public class Base {
             }
           }
         } catch (Exception e) {
-          Messages.loge("Problem checking NVIDIA driver", e);
+          Messages.err("Problem checking NVIDIA driver", e);
         }
       }).start();
     }
   }
+  */
 
 
   // . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
@@ -748,19 +754,19 @@ public class Base {
       } catch (VerifyError | AbstractMethodError ve) {
         System.err.println("\"" + tool.getMenuTitle() + "\" is not " +
                            "compatible with this version of Processing");
-        Messages.loge("Incompatible Tool found during tool.init()", ve);
+        Messages.err("Incompatible Tool found during tool.init()", ve);
 
       } catch (NoSuchMethodError nsme) {
         System.err.println("\"" + tool.getMenuTitle() + "\" is not " +
                            "compatible with this version of Processing");
         System.err.println("The " + nsme.getMessage() + " method no longer exists.");
-        Messages.loge("Incompatible Tool found during tool.init()", nsme);
+        Messages.err("Incompatible Tool found during tool.init()", nsme);
 
       } catch (NoClassDefFoundError ncdfe) {
         System.err.println("\"" + tool.getMenuTitle() + "\" is not " +
                            "compatible with this version of Processing");
         System.err.println("The " + ncdfe.getMessage() + " class is no longer available.");
-        Messages.loge("Incompatible Tool found during tool.init()", ncdfe);
+        Messages.err("Incompatible Tool found during tool.init()", ncdfe);
 
       } catch (Error | Exception e) {
         System.err.println("An error occurred inside \"" + tool.getMenuTitle() + "\"");
@@ -858,7 +864,7 @@ public class Base {
         Messages.showWarning("Tool out of date",
                              tool.getMenuTitle() + " is not compatible with this version of Processing.\n" +
                              "Try updating the Mode or contact its author for a new version.", ne);
-        Messages.loge("Incompatible tool found during tool.run()", ne);
+        Messages.err("Incompatible tool found during tool.run()", ne);
         item.setEnabled(false);
 
       } catch (Exception ex) {
@@ -1232,14 +1238,17 @@ public class Base {
    */
   public void handleOpenPrompt() {
     final StringList extensions = new StringList();
+
+    // Add support for pdez files
+    extensions.append(SKETCH_BUNDLE_EXT);
+
+    // Add the extensions for each installed Mode
     for (Mode mode : getModeList()) {
       extensions.append(mode.getDefaultExtension());
     }
 
-
     final String prompt = Language.text("open");
 
-    // don't use native dialogs on Linux (or anyone else w/ override)
     if (Preferences.getBoolean("chooser.files.native")) {  //$NON-NLS-1$
       // use the front-most window frame for placing file dialog
       FileDialog openDialog =
@@ -1268,8 +1277,8 @@ public class Base {
     } else {
       if (openChooser == null) {
         openChooser = new JFileChooser();
+        openChooser.setDialogTitle(prompt);
       }
-      openChooser.setDialogTitle(prompt);
 
       openChooser.setFileFilter(new javax.swing.filechooser.FileFilter() {
         public boolean accept(File file) {
@@ -1302,6 +1311,81 @@ public class Base {
    * Open a sketch from the path specified. Do not use for untitled sketches.
    */
   public Editor handleOpen(String path) {
+    if (path.endsWith(SKETCH_BUNDLE_EXT)) {
+      File zipFile = new File(path);
+      try {
+        File destFolder = File.createTempFile("zip", "tmp", untitledFolder);
+        if (!destFolder.delete() || !destFolder.mkdirs()) {
+          // Hard to imagine why this would happen, but...
+          System.err.println("Could not create temporary folder " + destFolder);
+          return null;
+        }
+        Util.unzip(zipFile, destFolder);
+        File[] fileList = destFolder.listFiles(File::isDirectory);
+        if (fileList != null) {
+          if (fileList.length == 1) {
+            File sketchFile = checkSketchFolder(fileList[0]);
+            if (sketchFile != null) {
+              return handleOpen(sketchFile.getAbsolutePath(), true);
+            }
+          } else {
+            System.err.println("Expecting one folder inside " +
+              SKETCH_BUNDLE_EXT + " file, found " + fileList.length + ".");
+          }
+        } else {
+          System.err.println("Could not read " + destFolder);
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+      return null;  // no luck
+
+    } else if (path.endsWith(CONTRIB_BUNDLE_EXT)) {
+      EventQueue.invokeLater(() -> {
+        Editor editor = getActiveEditor();
+        if (editor == null) {
+          // Shouldn't really happen, but if it's still null, it's a no-go
+          Messages.showWarning("Failure is the only option",
+                      "Please open an Editor window before installing an extension.");
+        } else {
+          File contribFile = new File(path);
+          String baseName = contribFile.getName();
+          baseName = baseName.substring(0, baseName.length() - CONTRIB_BUNDLE_EXT.length());
+          int result =
+            Messages.showYesNoQuestion(editor, "How to Handle " + CONTRIB_BUNDLE_EXT,
+              "Install " + baseName + "?",
+              "Libraries, Modes, and Tools should<br>" +
+                "only be installed from trusted sources.");
+
+          if (result == JOptionPane.YES_OPTION) {
+            editor.statusNotice("Installing " + baseName + "...");
+            editor.startIndeterminate();
+
+            new Thread(() -> {
+              try {
+                // do the work of the actual install
+                LocalContribution contrib =
+                  AvailableContribution.install(this, new File(path));
+
+                EventQueue.invokeLater(() -> {
+                  editor.stopIndeterminate();
+
+                  if (contrib != null) {
+                    editor.statusEmpty();
+                  } else {
+                    editor.statusError("Could not install " + path);
+                  }
+                });
+              } catch (IOException e) {
+                EventQueue.invokeLater(() -> Messages.showWarning("Exception During Installation", "Could not install contrib from " + path, e));
+              }
+            }).start();
+          }
+        }
+      });
+      return null;
+    }
+
     return handleOpen(path, false);
   }
 
@@ -1646,35 +1730,6 @@ public class Base {
   }
 
 
-  /*
-  public JMenu getRecentMenu() {
-    return recent.getMenu();
-  }
-
-
-  public JMenu getToolbarRecentMenu() {
-    return recent.getToolbarMenu();
-  }
-
-
-  public void handleRecent(Editor editor) {
-    recent.handle(editor);
-  }
-
-
-  public void handleRecentRename(Editor editor, String oldPath) {
-    recent.handleRename(editor, oldPath);
-  }
-
-
-  // Called before a sketch is renamed so that its old name is
-  // no longer in the menu.
-  public void removeRecent(Editor editor) {
-    recent.remove(editor);
-  }
-  */
-
-
   /**
    * Scan a folder recursively, and add any sketches found to the menu
    * specified. Set the openReplaces parameter to true when opening the sketch
@@ -1712,12 +1767,6 @@ public class Base {
     ActionListener listener = e -> {
       String path = e.getActionCommand();
       if (new File(path).exists()) {
-        /*
-        boolean replace = replaceExisting;
-        if ((e.getModifiers() & ActionEvent.SHIFT_MASK) != 0) {
-          replace = !replace;
-        }
-        */
         handleOpen(path);
       } else {
         Messages.showWarning("Sketch Disappeared",
@@ -1731,34 +1780,40 @@ public class Base {
 
     boolean found = false;
 
-//    for (int i = 0; i < list.length; i++) {
-//      if ((list[i].charAt(0) == '.') ||
-//          list[i].equals("CVS")) continue;
     for (String name : list) {
       if (name.charAt(0) == '.') {
         continue;
       }
 
-      File subfolder = new File(folder, name);
-      if (subfolder.isDirectory()) {
-        File entry = checkSketchFolder(subfolder, name);
-        if (entry != null) {
+      // TODO Is this necessary any longer? This seems gross [fry 210804]
+      if (name.equals("old")) {  // Don't add old contributions
+        continue;
+      }
 
-          JMenuItem item = new JMenuItem(name);
-          item.addActionListener(listener);
-          item.setActionCommand(entry.getAbsolutePath());
-          menu.add(item);
+      File entry = new File(folder, name);
+      File sketchFile = null;
+      if (entry.isDirectory()) {
+        sketchFile = checkSketchFolder(entry);
+      } else if (name.toLowerCase().endsWith(SKETCH_BUNDLE_EXT)) {
+        name = name.substring(0, name.length() - SKETCH_BUNDLE_EXT.length());
+        sketchFile = entry;
+      }
+
+      if (sketchFile != null) {
+        JMenuItem item = new JMenuItem(name);
+        item.addActionListener(listener);
+        item.setActionCommand(sketchFile.getAbsolutePath());
+        menu.add(item);
+        found = true;
+
+      } else if (entry.isDirectory()) {
+        // not a sketch folder, but may be a subfolder containing sketches
+        JMenu submenu = new JMenu(name);
+        // needs to be separate var otherwise would set found to false
+        boolean anything = addSketches(submenu, entry);
+        if (anything) {
+          menu.add(submenu);
           found = true;
-
-        } else {
-          // not a sketch folder, but maybe a subfolder containing sketches
-          JMenu submenu = new JMenu(name);
-          // needs to be separate var otherwise would set found to false
-          boolean anything = addSketches(submenu, subfolder);
-          if (anything && !name.equals("old")) { //Don't add old contributions
-            menu.add(submenu);
-            found = true;
-          }
         }
       }
     }
@@ -1766,6 +1821,10 @@ public class Base {
   }
 
 
+  /**
+   * Mostly identical to the JMenu version above, however the rules are
+   * slightly different for how examples are handled, etc.
+   */
   public boolean addSketches(DefaultMutableTreeNode node, File folder,
                              boolean examples) throws IOException {
     // skip .DS_Store files, etc (this shouldn't actually be necessary)
@@ -1810,25 +1869,30 @@ public class Base {
         continue;
       }
 
-      File subfolder = new File(folder, name);
-      if (subfolder.isDirectory()) {
-        File entry = checkSketchFolder(subfolder, name);
-        if (entry != null) {
-          DefaultMutableTreeNode item =
-            new DefaultMutableTreeNode(new SketchReference(name, entry));
+      File entry = new File(folder, name);
+      File sketchFile = null;
+      if (entry.isDirectory()) {
+        sketchFile = checkSketchFolder(entry);
+      } else if (name.toLowerCase().endsWith(SKETCH_BUNDLE_EXT)) {
+        name = name.substring(0, name.length() - SKETCH_BUNDLE_EXT.length());
+        sketchFile = entry;
+      }
 
-          node.add(item);
+      if (sketchFile != null) {
+        DefaultMutableTreeNode item =
+          new DefaultMutableTreeNode(new SketchReference(name, sketchFile));
+
+        node.add(item);
+        found = true;
+
+      } else if (entry.isDirectory()) {
+        // not a sketch folder, but maybe a subfolder containing sketches
+        DefaultMutableTreeNode subNode = new DefaultMutableTreeNode(name);
+        // needs to be separate var otherwise would set found to false
+        boolean anything = addSketches(subNode, entry, examples);
+        if (anything) {
+          node.add(subNode);
           found = true;
-
-        } else {
-          // not a sketch folder, but maybe a subfolder containing sketches
-          DefaultMutableTreeNode subNode = new DefaultMutableTreeNode(name);
-          // needs to be separate var otherwise would set found to false
-          boolean anything = addSketches(subNode, subfolder, examples);
-          if (anything) {
-            node.add(subNode);
-            found = true;
-          }
         }
       }
     }
@@ -1841,10 +1905,10 @@ public class Base {
    * Because the default mode will be the first in the list, this will always
    * prefer that one over the others.
    */
-  File checkSketchFolder(File subfolder, String item) {
+  private File checkSketchFolder(File folder) {
     for (Mode mode : getModeList()) {
-      File entry = new File(subfolder, item + "." + mode.getDefaultExtension()); //$NON-NLS-1$
-      // if a .pde file of the same prefix as the folder exists..
+      // Test whether a .pde file of the same name as its parent folder exists.
+      File entry = new File(folder, folder.getName() + "." + mode.getDefaultExtension()); //$NON-NLS-1$
       if (entry.exists()) {
         return entry;
       }
@@ -1903,8 +1967,8 @@ public class Base {
         if (!settingsFolder.mkdirs()) {
           Messages.showError("Settings issues",
                              "Processing cannot run because it could not\n" +
-                             "create a folder to store your settings.\n" +
-                             settingsFolder.getAbsolutePath(), null);
+                             "create a folder to store your settings at\n" +
+                             settingsFolder, null);
         }
       }
     } catch (Exception e) {
